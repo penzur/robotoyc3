@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Controller And Sheyt!</title>
+
+    <style>
+        * {
+            padding: 0;
+            margin: 0;
+            outline: none;
+            border: 0;
+            border-radius: 0;
+        }
+
+        body {
+            background-color: rgba(0, 0, 255, 0.02);
+            height: 100vh;
+            width: 100vw;
+            box-sizing: border-box;
+            padding: 8px;
+        }
+
+        div {
+            box-sizing: border-box;
+        }
+
+        .wrap {
+            display: flex;
+            height: 100%;
+            width: 100%;
+            overflow: auto;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .wrap>div:first-child {
+            height: 30%;
+            display: flex;
+            flex-direction: row;
+            gap: 8px;
+        }
+
+        .wrap>div:last-child {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn {
+            border-radius: 10px;
+            width: 100%;
+            height: 100%;
+            border: 1px solid rgba(0, 0, 255, .5);
+            background: rgba(0, 0, 255, 0.1);
+            color: #333ccc;
+            -webkit-user-select: none;
+            /* Prevents text selection */
+            -webkit-touch-callout: none;
+            /* Prevents long-press context menu */
+            user-select: none;
+            touch-action: none;
+            /* Prevents browser-handled zooming/scrolling */
+            -webkit-tap-highlight-color: #000000;
+        }
+
+        #connection {
+            color: #000000;
+            height: 36%;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        input[type=range] {
+            height: 100%;
+            flex: 1;
+        }
+
+        .status {
+            display: inline-block;
+            width: 32px;
+            height: 32px;
+            background-color: rgba(255, 0, 0, .5);
+            border-radius: 100px;
+        }
+
+        .connected>.status {
+            background-color: rgba(0, 255, 0, .5);
+        }
+
+        .btn>span {
+            display: inline-block;
+            font-size: 2rem;
+            transform: rotate(90deg);
+        }
+
+        input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 60%;
+            background: transparent;
+            cursor: pointer;
+        }
+
+        /* base track */
+        input[type="range"]::-webkit-slider-runnable-track {
+            height: 90%;
+            background: hsl(240 5% 90%);
+            border-radius: 0;
+        }
+
+        input[type="range"]::-moz-range-track {
+            height: 90%;
+            background: hsl(240 5% 90%);
+            border-radius: 0;
+        }
+
+        /* progress fill */
+        input[type="range"]::-webkit-slider-runnable-track {
+            background: linear-gradient(to right,
+                    hsl(258 90% 66%) 0%,
+                    hsl(258 90% 66%) var(--value, 50%),
+                    hsl(240 5% 90%) var(--value, 50%),
+                    hsl(240 5% 90%) 100%);
+        }
+
+        input[type="range"]::-moz-range-track {
+            background: linear-gradient(to right,
+                    hsl(258 90% 66%) 0%,
+                    hsl(258 90% 66%) var(--value, 50%),
+                    hsl(240 5% 90%) var(--value, 50%),
+                    hsl(240 5% 90%) 100%);
+        }
+
+
+        /* thumb */
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 10%;
+            height: 100%;
+            border-radius: 0;
+            background: hsl(258 90% 66%);
+            border: none;
+        }
+
+        input[type="range"]::-moz-range-thumb {
+            width: 10%;
+            height: 100%;
+            border-radius: 0;
+            background: hsl(258 90% 66%);
+            border: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="wrap">
+        <div class="box">
+            <button id="back" class="btn"><span>BACK</span></button>
+            <button id="forward" class="btn"><span>FORWARD</span></button>
+        </div>
+        <div class="box">
+            <button id="left" class="btn"><span>LEFT</span></button>
+            <button id="right" class="btn"><span>RIGHT</span></button>
+            <div id="connection">
+                <span class="status">&nbsp;</span>
+                <input id="speed" type="range" min="10" max="100" value="100" />
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const control = {
+            forward: false,
+            back: false,
+            left: false,
+            right: false,
+            speed: 100,
+        }
+
+        let socket = new WebSocket('ws://192.168.1.1:3000/ws', ["robotoy"]);
+
+        // Connection opened
+        socket.addEventListener('open', (event) => {
+            connection.classList.add('connected');
+        });
+
+        // Listen for echoed messages
+        socket.addEventListener('message', (event) => {
+            console.log('Echoed back:', event.data);
+
+            // Parse JSON if needed
+            try {
+                const data = JSON.parse(event.data);
+                console.log('Received JSON:', data);
+            } catch (e) {
+                console.log('Received text:', event.data);
+            }
+        });
+
+        // Handle errors
+        socket.addEventListener('error', (event) => {
+            console.error('WebSocket error:', event);
+        });
+
+        // Connection closed
+        socket.addEventListener('close', (event) => {
+            console.log('Disconnected from echo server');
+            console.log('Close code:', event.code);
+            console.log('Close reason:', event.reason);
+            connection.classList.remove('connected');
+        });
+
+
+        const handler = {
+            set: function (target, property, value) {
+                target[property] = value;
+                socket.send(JSON.stringify(target));
+                return true; // Indicate success
+            }
+        };
+
+        const controlProxy = new Proxy(control, handler);
+
+        const buttons = ['forward', 'back', 'left', 'right'];
+        buttons.forEach(id => {
+            const ele = document.getElementById(id);
+
+            // Unified handler for both Touch and Mouse
+            const startAction = (e) => {
+                e.preventDefault();
+                controlProxy[id] = true;
+            };
+
+            const stopAction = (e) => {
+                e.preventDefault();
+                controlProxy[id] = false;
+            };
+
+            // MUST set passive: false to allow e.preventDefault()
+            ele.addEventListener('touchstart', startAction, {passive: false});
+            ele.addEventListener('touchend', stopAction, {passive: false});
+
+            // Mouse fallback for testing
+            ele.onmousedown = startAction;
+            ele.onmouseup = stopAction;
+            ele.onmouseleave = stopAction; // Ensures it stops if mouse drags away
+        });
+
+        const handleSpeed = () => {
+            const percent = (speed.value - speed.min) / (speed.max - speed.min) * 100;
+            speed.style.setProperty("--value", percent + "%");
+            const val = parseInt(speed.value.trim(), 10);
+            if (!isNaN(val)) {
+                controlProxy.speed = val;
+            }
+        }
+        speed.oninput = handleSpeed;
+        handleSpeed();
+
+        window.onkeydown = (e) => {
+            switch (e.key) {
+                case 'w':
+                    controlProxy.forward = true;
+                    break;
+                case 's':
+                    controlProxy.back = true;
+                    break;
+                case 'a':
+                    controlProxy.left = true;
+                    break;
+                case 'd':
+                    controlProxy.right = true;
+                    break;
+                default:
+            }
+        }
+        window.onkeyup = (e) => {
+            switch (e.key) {
+                case 'w':
+                    controlProxy.forward = false;
+                    break;
+                case 's':
+                    controlProxy.back = false;
+                    break;
+                case 'a':
+                    controlProxy.left = false;
+                    break;
+                case 'd':
+                    controlProxy.right = false;
+                    break;
+                default:
+            }
+        }
+    </script>
+</body>
+
+</html>
