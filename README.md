@@ -1,4 +1,4 @@
-# Robotoy C3
+# d-____-b
 
 Firmware for a salvaged RC monster truck rebuilt with an ESP32-C3 and a mini brushed ESC.
 
@@ -37,13 +37,3 @@ SSID="MyRobot" PASSWORD="secret123" cargo run --release
 3. **Open controller:** Navigate to `http://192.168.1.1` in your browser
 4. **Drive:** Use the on-screen buttons or WASD keys to control the truck
 
-## Project Structure
-
-```
-src/
-├── bin/main.rs    # Entry point, motor control loop
-├── lib.rs         # Module exports
-├── wifi.rs        # WiFi AP and network stack
-├── ws.rs          # WebSocket server, control handling
-└── index.html     # Embedded web controller UI
-```
