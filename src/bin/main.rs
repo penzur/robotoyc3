@@ -22,7 +22,7 @@ use esp_println as _;
 use esp_radio::Controller;
 use picoserve::{AppBuilder, AppRouter};
 use robotoyc3::wifi::{self, WEB_POOL_SIZE, check_connection, init_stack};
-use robotoyc3::ws::{App, CTL_STATE, Control, ctl_state_task};
+use robotoyc3::ws::{App, CTL_STATE, Control, ctl_state_task, serve};
 use static_cell::StaticCell;
 
 static RADIO: StaticCell<Controller> = StaticCell::new();
@@ -169,22 +169,4 @@ async fn main(spawner: Spawner) -> ! {
             left_channel.set_duty_hw(u32::from(pulse_us_to_duty(ESC_NEUTRAL_US, l_max_duty)));
         }
     }
-}
-
-#[embassy_executor::task(pool_size = 4)]
-async fn serve(
-    task_id: usize,
-    stack: embassy_net::Stack<'static>,
-    app: &'static AppRouter<App>,
-    config: &'static picoserve::Config<Duration>,
-) -> ! {
-    let port = 80;
-    let mut tcp_rx_buffer = [0; 1024];
-    let mut tcp_tx_buffer = [0; 1024];
-    let mut http_buffer = [0; 2048];
-
-    picoserve::Server::new(app, config, &mut http_buffer)
-        .listen_and_serve(task_id, stack, port, &mut tcp_rx_buffer, &mut tcp_tx_buffer)
-        .await
-        .into_never()
 }
