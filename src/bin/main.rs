@@ -66,6 +66,53 @@ async fn main(spawner: Spawner) -> ! {
 
     info!("Embassy initialized!");
 
+    // Configure LEDC/PWM first so ESCs receive a neutral signal before WiFi init.
+    // Floating GPIO pins cause ESCs to draw unpredictable current which can brownout WiFi.
+    let mut ledc = ledc::Ledc::new(peripherals.LEDC);
+    ledc.set_global_slow_clock(ledc::LSGlobalClkSource::APBClk);
+
+    let mut t0 = ledc.timer::<LowSpeed>(ledc::timer::Number::Timer0);
+    t0.configure(ledc::timer::config::Config {
+        duty: Duty::Duty14Bit,
+        clock_source: ledc::timer::LSClockSource::APBClk,
+        frequency: Rate::from_hz(ESC_PWM_HZ),
+    })
+    .expect("Could not configure time");
+    let r_max_duty = 1u16 << (t0.duty().unwrap() as u16);
+
+    let mut right_channel =
+        ledc.channel::<LowSpeed>(ledc::channel::Number::Channel0, peripherals.GPIO3);
+    right_channel
+        .configure(ledc::channel::config::Config {
+            duty_pct: 0,
+            timer: &mut t0,
+            drive_mode: esp_hal::gpio::DriveMode::PushPull,
+        })
+        .unwrap();
+    right_channel.set_duty_hw(u32::from(pulse_us_to_duty(ESC_NEUTRAL_US, r_max_duty)));
+
+    let mut t1 = ledc.timer::<LowSpeed>(ledc::timer::Number::Timer1);
+    t1.configure(ledc::timer::config::Config {
+        duty: Duty::Duty14Bit,
+        clock_source: ledc::timer::LSClockSource::APBClk,
+        frequency: Rate::from_hz(ESC_PWM_HZ),
+    })
+    .expect("Could not configure time");
+    let l_max_duty = 1u16 << (t1.duty().unwrap() as u16);
+
+    let mut left_channel =
+        ledc.channel::<LowSpeed>(ledc::channel::Number::Channel1, peripherals.GPIO4);
+    left_channel
+        .configure(ledc::channel::config::Config {
+            duty_pct: 0,
+            timer: &mut t1,
+            drive_mode: esp_hal::gpio::DriveMode::PushPull,
+        })
+        .unwrap();
+    left_channel.set_duty_hw(u32::from(pulse_us_to_duty(ESC_NEUTRAL_US, l_max_duty)));
+
+    info!("ESC PWM initialized with neutral signal");
+
     let radio_init = RADIO.init(esp_radio::init().unwrap());
     let (wctl, wface) =
         esp_radio::wifi::new(radio_init, peripherals.WIFI, Default::default()).unwrap();
@@ -86,47 +133,6 @@ async fn main(spawner: Spawner) -> ! {
     spawner.spawn(wifi::wifi_ap_setup(wctl)).ok();
     spawner.spawn(wifi::network_stack(runner)).ok();
     check_connection(stack).await;
-
-    let mut ledc = ledc::Ledc::new(peripherals.LEDC);
-    ledc.set_global_slow_clock(ledc::LSGlobalClkSource::APBClk);
-
-    let mut t0 = ledc.timer::<LowSpeed>(ledc::timer::Number::Timer0);
-    t0.configure(ledc::timer::config::Config {
-        duty: Duty::Duty14Bit,
-        clock_source: ledc::timer::LSClockSource::APBClk,
-        frequency: Rate::from_hz(ESC_PWM_HZ),
-    })
-    .expect("Could not configure time");
-    let r_max_duty = 1u16 << (t0.duty().unwrap() as u16);
-
-    let mut right_channel =
-        ledc.channel::<LowSpeed>(ledc::channel::Number::Channel0, peripherals.GPIO21);
-    right_channel
-        .configure(ledc::channel::config::Config {
-            duty_pct: 0,
-            timer: &mut t0,
-            drive_mode: esp_hal::gpio::DriveMode::PushPull,
-        })
-        .unwrap();
-
-    let mut t1 = ledc.timer::<LowSpeed>(ledc::timer::Number::Timer1);
-    t1.configure(ledc::timer::config::Config {
-        duty: Duty::Duty14Bit,
-        clock_source: ledc::timer::LSClockSource::APBClk,
-        frequency: Rate::from_hz(ESC_PWM_HZ),
-    })
-    .expect("Could not configure time");
-    let l_max_duty = 1u16 << (t1.duty().unwrap() as u16);
-
-    let mut left_channel =
-        ledc.channel::<LowSpeed>(ledc::channel::Number::Channel1, peripherals.GPIO20);
-    left_channel
-        .configure(ledc::channel::config::Config {
-            duty_pct: 0,
-            timer: &mut t1,
-            drive_mode: esp_hal::gpio::DriveMode::PushPull,
-        })
-        .unwrap();
 
     let app = APP.init(App.build_app());
     let config = CONFIG.init(
@@ -158,7 +164,6 @@ async fn main(spawner: Spawner) -> ! {
             right_channel.set_duty_hw(u32::from(pulse_us_to_duty(ESC_NEUTRAL_US, r_max_duty)));
         }
 
-        // TODO: reverse motor wiring for left channel
         if (control.forward || control.right) && !control.left && !control.back {
             let duty = ESC_NEUTRAL_US + (control.speed as u32 * 500 / 100);
             left_channel.set_duty_hw(u32::from(pulse_us_to_duty(duty, l_max_duty)));
